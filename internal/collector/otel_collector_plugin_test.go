@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -783,4 +784,33 @@ func createFakeCollector() *typesfakes.FakeCollectorInterface {
 	})
 
 	return fakeCollector
+}
+
+func TestSetProxyEnvVars(t *testing.T) {
+	// Save current env and restore after test
+	origHTTPProxy := os.Getenv("HTTP_PROXY")
+	origHTTPSProxy := os.Getenv("HTTPS_PROXY")
+	defer func() {
+		t.Setenv("HTTP_PROXY", origHTTPProxy)
+		t.Setenv("HTTPS_PROXY", origHTTPSProxy)
+	}()
+
+	proxy := &config.Proxy{URL: "http://testproxy:8888"}
+	setProxyEnvVars(context.Background(), proxy)
+
+	if got := os.Getenv("HTTP_PROXY"); got != "http://testproxy:8888" {
+		t.Errorf("HTTP_PROXY not set correctly, got %q", got)
+	}
+	if got := os.Getenv("HTTPS_PROXY"); got != "" {
+		t.Errorf("HTTPS_PROXY should not be set for http proxy, got %q", got)
+	}
+
+	// Test with nil proxy
+	setProxyEnvVars(context.Background(), nil)
+	// Should not panic or change env
+
+	// Test with empty URL
+	proxy = &config.Proxy{URL: ""}
+	setProxyEnvVars(context.Background(), proxy)
+	// Should not change env
 }

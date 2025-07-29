@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -228,6 +229,12 @@ func (oc *Collector) bootup(ctx context.Context) error {
 			return
 		}
 
+		if oc.config.Collector.Exporters.OtlpExporters != nil ||
+			oc.config.Collector.Exporters.PrometheusExporter != nil {
+			// Set proxy env vars for OTLP exporter if proxy is configured.
+			oc.setExporterProxyEnvVars(ctx)
+		}
+
 		appErr := oc.service.Run(ctx)
 		if appErr != nil {
 			errChan <- appErr
@@ -389,6 +396,11 @@ func (oc *Collector) restartCollector(ctx context.Context) {
 		return
 	}
 	oc.service = oTelCollector
+
+	if oc.config.Collector.Exporters.OtlpExporters != nil || oc.config.Collector.Exporters.PrometheusExporter != nil {
+		// Set proxy env vars for OTLP exporter if proxy is configured.
+		oc.setExporterProxyEnvVars(ctx)
+	}
 
 	var runCtx context.Context
 	runCtx, oc.cancel = context.WithCancel(ctx)
@@ -689,4 +701,48 @@ func escapeString(input string) string {
 	output = strings.ReplaceAll(output, "\"", "\\\"")
 
 	return output
+}
+
+func setProxyEnvVars(ctx context.Context, proxyConf *config.Proxy) {
+	if proxyConf == nil || proxyConf.URL == "" {
+		return
+	}
+	parsedURL, err := url.Parse(proxyConf.URL)
+	if err != nil {
+		return
+	}
+	switch parsedURL.Scheme {
+	case "http":
+		err = os.Setenv("HTTP_PROXY", proxyConf.URL)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to parse proxy URL", "url", proxyConf.URL, "error", err)
+			return
+		}
+		proxy := os.Getenv("HTTP_PROXY")
+		slog.DebugContext(ctx, "HTTP_PROXY is set to:", "proxy", proxy)
+	case "https":
+		os.Setenv("HTTPS_PROXY", proxyConf.URL)
+		slog.DebugContext(ctx, "Setting HTTPS_PROXY", "url", proxyConf.URL)
+	}
+	if proxyConf.NoProxy != "" {
+		os.Setenv("NO_PROXY", proxyConf.NoProxy)
+		slog.DebugContext(ctx, "Setting NO_PROXY", "no_proxy", proxyConf.NoProxy)
+	}
+}
+
+func (oc *Collector) setExporterProxyEnvVars(ctx context.Context) {
+	// Set proxy env vars for each OTLP exporter that has a proxy configured.
+	// Loop is for the case when one exporter have HTTP proxy and the other one have HTTPS.
+	if oc.config.Collector.Exporters.OtlpExporters != nil {
+		for _, otlpExporter := range oc.config.Collector.Exporters.OtlpExporters {
+			if otlpExporter.Proxy != nil && otlpExporter.Proxy.URL != "" {
+				setProxyEnvVars(ctx, otlpExporter.Proxy)
+			}
+		}
+	}
+	// Prometheus Exporter
+	if oc.config.Collector.Exporters.PrometheusExporter != nil &&
+		oc.config.Collector.Exporters.PrometheusExporter.Proxy != nil {
+		setProxyEnvVars(ctx, oc.config.Collector.Exporters.PrometheusExporter.Proxy)
+	}
 }

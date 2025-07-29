@@ -469,6 +469,65 @@ func registerCommandFlags(fs *flag.FlagSet) {
 		DefCommandTLServerNameKey,
 		"Specifies the name of the server sent in the TLS configuration.",
 	)
+	fs.Duration(
+		CommandServerProxyTimeoutKey,
+		DefCommandServerProxyTimeoutKey,
+		"The EFP HTTP Timeout, value in seconds")
+	fs.String(
+		CommandServerProxyURLKey,
+		DefCommandServerProxyURlKey,
+		"The Proxy URL to use for EFP.",
+	)
+	fs.String(
+		CommandServerProxyNoProxyKey,
+		DefCommandServerProxyNoProxyKey,
+		"The No-Proxy URL to use for EFP.",
+	)
+	fs.String(
+		CommandServerProxyAuthMethodKey,
+		DefCommandServerProxyAuthMethodKey,
+		"The Authentication method used for EFP.",
+	)
+	fs.String(
+		CommandServerProxyUsernameKey,
+		DefCommandServerProxyUsernameKey,
+		"The Username used for basic authentication for EFP.",
+	)
+	fs.String(
+		CommandServerProxyPasswordKey,
+		DefCommandServerProxyPasswordKey,
+		"The Password used for basic authentication for EFP.",
+	)
+	fs.String(
+		CommandServerProxyTokenKey,
+		DefCommandServerProxyTokenKey,
+		"The bearer token used for authentication for EFP.",
+	)
+	fs.String(
+		CommandServerProxyTLSCertKey,
+		DefCommandServerProxyTLSCertKey,
+		"The path to the certificate file to use for TLS communication with the command server.",
+	)
+	fs.String(
+		CommandServerProxyTLSKeyKey,
+		DefCommandServerProxyTLSKeyKey,
+		"The path to the certificate key file to use for TLS communication with the command server.",
+	)
+	fs.String(
+		CommandServerProxyTLSCaKey,
+		DefCommandServerProxyTLSCaKey,
+		"The path to CA certificate file to use for TLS communication with the command server.",
+	)
+	fs.Bool(
+		CommandServerProxyTLSSkipVerifyKey,
+		DefCommandServerProxyTLSSkipVerifyKey,
+		"Testing only. Skip verify controls client verification of a server's certificate chain and host name.",
+	)
+	fs.String(
+		CommandServerProxyTLSServerNameKey,
+		DefCommandServerProxyTLServerNameKey,
+		"Specifies the name of the server sent in the TLS configuration.",
+	)
 }
 
 func registerAuxiliaryCommandFlags(fs *flag.FlagSet) {
@@ -862,6 +921,12 @@ func resolveExporters() (Exporters, error) {
 
 	if isPrometheusExporterSet() {
 		exporters.PrometheusExporter = &PrometheusExporter{
+			Proxy: &Proxy{
+				URL:     viperInstance.GetString(CollectorPrometheusExporterProxyURLKey),
+				NoProxy: viperInstance.GetString(CollectorPrometheusExporterProxyNoProxyKey),
+			},
+		}
+		exporters.PrometheusExporter = &PrometheusExporter{
 			Server: &ServerConfig{
 				Host: viperInstance.GetString(CollectorPrometheusExporterServerHostKey),
 				Port: viperInstance.GetInt(CollectorPrometheusExporterServerPortKey),
@@ -1054,9 +1119,10 @@ func resolveCommand() *Command {
 
 	command := &Command{
 		Server: &ServerConfig{
-			Host: viperInstance.GetString(CommandServerHostKey),
-			Port: viperInstance.GetInt(CommandServerPortKey),
-			Type: serverType,
+			Host:  viperInstance.GetString(CommandServerHostKey),
+			Port:  viperInstance.GetInt(CommandServerPortKey),
+			Type:  serverType,
+			Proxy: resolveProxy(),
 		},
 	}
 
@@ -1078,6 +1144,36 @@ func resolveCommand() *Command {
 	}
 
 	return command
+}
+
+func resolveProxy() *Proxy {
+	proxy := &Proxy{
+		Timeout:    viperInstance.GetDuration(CommandServerProxyTimeoutKey),
+		URL:        viperInstance.GetString(CommandServerProxyURLKey),
+		NoProxy:    viperInstance.GetString(CommandServerProxyNoProxyKey),
+		Username:   viperInstance.GetString(CommandServerProxyUsernameKey),
+		Password:   viperInstance.GetString(CommandServerProxyPasswordKey),
+		Token:      viperInstance.GetString(CommandServerProxyTokenKey),
+		AuthMethod: viperInstance.GetString(CommandServerProxyAuthMethodKey),
+	}
+
+	if areCommandServerProxyTLSSettingsSet() {
+		proxy.TLS = &TLSConfig{
+			Cert:       viperInstance.GetString(CommandServerProxyTLSCertKey),
+			Key:        viperInstance.GetString(CommandServerProxyTLSKeyKey),
+			Ca:         viperInstance.GetString(CommandServerProxyTLSCaKey),
+			SkipVerify: viperInstance.GetBool(CommandServerProxyTLSSkipVerifyKey),
+			ServerName: viperInstance.GetString(CommandServerProxyTLSServerNameKey),
+		}
+	}
+
+	// If all fields are zero/nil/empty, return nil
+	if proxy.TLS == nil && proxy.Timeout == 0 && proxy.URL == "" && proxy.NoProxy == "" &&
+		proxy.AuthMethod == "" && proxy.Username == "" && proxy.Password == "" && proxy.Token == "" {
+		return nil
+	}
+
+	return proxy
 }
 
 func resolveAuxiliaryCommand() *Command {
@@ -1134,6 +1230,14 @@ func areCommandTLSSettingsSet() bool {
 		viperInstance.IsSet(CommandTLSCaKey) ||
 		viperInstance.IsSet(CommandTLSSkipVerifyKey) ||
 		viperInstance.IsSet(CommandTLSServerNameKey)
+}
+
+func areCommandServerProxyTLSSettingsSet() bool {
+	return viperInstance.IsSet(CommandServerProxyTLSCertKey) ||
+		viperInstance.IsSet(CommandServerProxyTLSKeyKey) ||
+		viperInstance.IsSet(CommandServerProxyTLSCaKey) ||
+		viperInstance.IsSet(CommandServerProxyTLSSkipVerifyKey) ||
+		viperInstance.IsSet(CommandServerProxyTLSServerNameKey)
 }
 
 func areAuxiliaryCommandTLSSettingsSet() bool {

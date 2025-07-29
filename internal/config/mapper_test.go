@@ -35,9 +35,14 @@ func TestFromCommandProto(t *testing.T) {
 				},
 			},
 			expected: &Command{
-				Server: agentConfig().Command.Server,
-				Auth:   nil,
-				TLS:    agentConfig().Command.TLS,
+				Server: &ServerConfig{
+					Host:  agentConfig().Command.Server.Host,
+					Port:  agentConfig().Command.Server.Port,
+					Type:  agentConfig().Command.Server.Type,
+					Proxy: nil,
+				},
+				Auth: nil,
+				TLS:  agentConfig().Command.TLS,
 			},
 		},
 		{
@@ -75,9 +80,14 @@ func TestFromCommandProto(t *testing.T) {
 				},
 			},
 			expected: &Command{
-				Server: agentConfig().Command.Server,
-				Auth:   nil,
-				TLS:    agentConfig().Command.TLS,
+				Server: &ServerConfig{
+					Host:  agentConfig().Command.Server.Host,
+					Port:  agentConfig().Command.Server.Port,
+					Type:  agentConfig().Command.Server.Type,
+					Proxy: nil,
+				},
+				Auth: nil,
+				TLS:  agentConfig().Command.TLS,
 			},
 		},
 		{
@@ -91,9 +101,14 @@ func TestFromCommandProto(t *testing.T) {
 				Auth: &mpi.AuthSettings{},
 			},
 			expected: &Command{
-				Server: agentConfig().Command.Server,
-				Auth:   nil,
-				TLS:    nil,
+				Server: &ServerConfig{
+					Host:  agentConfig().Command.Server.Host,
+					Port:  agentConfig().Command.Server.Port,
+					Type:  agentConfig().Command.Server.Type,
+					Proxy: nil,
+				},
+				Auth: nil,
+				TLS:  nil,
 			},
 		},
 		{

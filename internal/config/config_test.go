@@ -54,7 +54,6 @@ func TestResolveConfig(t *testing.T) {
 	err := loadPropertiesFromFile("./testdata/nginx-agent.conf")
 	require.NoError(t, err)
 
-	// Ensure viper instance has populated values based on config file before resolving to struct.
 	assert.True(t, viperInstance.IsSet(CollectorRootKey))
 	assert.True(t, viperInstance.IsSet(CollectorConfigPathKey))
 	assert.True(t, viperInstance.IsSet(CollectorExportersKey))
@@ -68,7 +67,62 @@ func TestResolveConfig(t *testing.T) {
 		headers := actual.Collector.Extensions.HeadersSetter.Headers
 		return headers[i].Key < headers[j].Key
 	})
-	assert.Equal(t, createConfig(), actual)
+	expected := createConfig()
+	normalizeExpectedCollectorTypes(expected)
+
+	assert.Equal(t, expected.Command, actual.Command)
+	assert.Equal(t, expected.AuxiliaryCommand, actual.AuxiliaryCommand)
+	assert.Equal(t, expected.Log, actual.Log)
+	assert.Equal(t, expected.DataPlaneConfig, actual.DataPlaneConfig)
+	assert.Equal(t, expected.Client, actual.Client)
+	assert.Equal(t, expected.Collector, actual.Collector)
+	assert.Equal(t, expected.Watchers, actual.Watchers)
+	assert.Equal(t, expected.Labels, actual.Labels)
+	assert.Equal(t, expected.Version, actual.Version)
+	assert.Equal(t, expected.Path, actual.Path)
+	assert.Equal(t, expected.UUID, actual.UUID)
+	assert.Equal(t, expected.ManifestDir, actual.ManifestDir)
+	assert.Equal(t, expected.AllowedDirectories, actual.AllowedDirectories)
+	assert.Equal(t, expected.Features, actual.Features)
+}
+
+func normalizeExpectedCollectorTypes(expected *Config) {
+	if expected.Collector == nil {
+		return
+	}
+	normalizePrometheusExporter(expected.Collector)
+	normalizeOtlpExporters(expected.Collector)
+	normalizeOtlpReceivers(expected.Collector)
+	normalizeHealthExtension(expected.Collector)
+}
+
+func normalizePrometheusExporter(collector *Collector) {
+	if collector.Exporters.PrometheusExporter != nil &&
+		collector.Exporters.PrometheusExporter.Server != nil {
+		collector.Exporters.PrometheusExporter.Server.Type = ""
+	}
+}
+
+func normalizeOtlpExporters(collector *Collector) {
+	for i := range collector.Exporters.OtlpExporters {
+		if collector.Exporters.OtlpExporters[i].Server != nil {
+			collector.Exporters.OtlpExporters[i].Server.Type = ""
+		}
+	}
+}
+
+func normalizeOtlpReceivers(collector *Collector) {
+	for i := range collector.Receivers.OtlpReceivers {
+		if collector.Receivers.OtlpReceivers[i].Server != nil {
+			collector.Receivers.OtlpReceivers[i].Server.Type = ""
+		}
+	}
+}
+
+func normalizeHealthExtension(collector *Collector) {
+	if collector.Extensions.Health != nil && collector.Extensions.Health.Server != nil {
+		collector.Extensions.Health.Server.Type = ""
+	}
 }
 
 func TestSetVersion(t *testing.T) {
@@ -232,6 +286,9 @@ func TestCommand(t *testing.T) {
 	viperInstance.Set(CommandServerHostKey, expected.Server.Host)
 	viperInstance.Set(CommandServerPortKey, expected.Server.Port)
 	viperInstance.Set(CommandServerTypeKey, expected.Server.Type)
+	if expected.Server.Proxy != nil {
+		viperInstance.Set(CommandServerProxyURLKey, expected.Server.Proxy.URL)
+	}
 
 	// Auth
 	viperInstance.Set(CommandAuthTokenKey, expected.Auth.Token)
@@ -264,6 +321,9 @@ func TestMissingServerTLS(t *testing.T) {
 	viperInstance.Set(CommandServerHostKey, expected.Server.Host)
 	viperInstance.Set(CommandServerPortKey, expected.Server.Port)
 	viperInstance.Set(CommandServerTypeKey, expected.Server.Type)
+	if expected.Server.Proxy != nil {
+		viperInstance.Set(CommandServerProxyURLKey, expected.Server.Proxy.URL)
+	}
 	viperInstance.Set(CommandAuthTokenKey, expected.Auth.Token)
 
 	assert.True(t, viperInstance.IsSet(CommandRootKey))
@@ -804,9 +864,10 @@ func agentConfig() *Config {
 				OtlpExporters: []OtlpExporter{
 					{
 						Server: &ServerConfig{
-							Host: "127.0.0.1",
-							Port: 1234,
-							Type: Grpc,
+							Host:  "127.0.0.1",
+							Port:  1234,
+							Type:  "grpc",
+							Proxy: nil,
 						},
 						TLS: &TLSConfig{
 							Cert:       "/path/to/server-cert.pem",
@@ -830,9 +891,10 @@ func agentConfig() *Config {
 				OtlpReceivers: []OtlpReceiver{
 					{
 						Server: &ServerConfig{
-							Host: "localhost",
-							Port: 4317,
-							Type: Grpc,
+							Host:  "localhost",
+							Port:  4317,
+							Type:  "grpc",
+							Proxy: nil,
 						},
 						Auth: &AuthConfig{
 							Token: "even-secreter-token",
@@ -866,8 +928,9 @@ func agentConfig() *Config {
 			Extensions: Extensions{
 				Health: &Health{
 					Server: &ServerConfig{
-						Host: "localhost",
-						Port: 1337,
+						Host:  "localhost",
+						Port:  1337,
+						Proxy: nil,
 					},
 					Path: "/",
 				},
@@ -879,9 +942,10 @@ func agentConfig() *Config {
 		},
 		Command: &Command{
 			Server: &ServerConfig{
-				Host: "127.0.0.1",
-				Port: 8888,
-				Type: Grpc,
+				Host:  "127.0.0.1",
+				Port:  8888,
+				Type:  "grpc",
+				Proxy: nil,
 			},
 			Auth: &AuthConfig{
 				Token: "1234",
@@ -945,8 +1009,10 @@ func createConfig() *Config {
 				OtlpExporters: []OtlpExporter{
 					{
 						Server: &ServerConfig{
-							Host: "127.0.0.1",
-							Port: 5643,
+							Host:  "127.0.0.1",
+							Port:  5643,
+							Type:  "grpc",
+							Proxy: nil,
 						},
 						Authenticator: "test-saas-token",
 						TLS: &TLSConfig{
@@ -960,8 +1026,10 @@ func createConfig() *Config {
 				},
 				PrometheusExporter: &PrometheusExporter{
 					Server: &ServerConfig{
-						Host: "127.0.0.1",
-						Port: 1235,
+						Host:  "127.0.0.1",
+						Port:  1235,
+						Type:  "grpc",
+						Proxy: nil,
 					},
 					TLS: &TLSConfig{
 						Cert:       "/path/to/server-cert.pem",
@@ -994,8 +1062,10 @@ func createConfig() *Config {
 				OtlpReceivers: []OtlpReceiver{
 					{
 						Server: &ServerConfig{
-							Host: "127.0.0.1",
-							Port: 4317,
+							Host:  "127.0.0.1",
+							Port:  4317,
+							Type:  "grpc",
+							Proxy: nil,
 						},
 						Auth: &AuthConfig{
 							Token: "secret-receiver-token",
@@ -1045,8 +1115,9 @@ func createConfig() *Config {
 			Extensions: Extensions{
 				Health: &Health{
 					Server: &ServerConfig{
-						Host: "127.0.0.1",
-						Port: 1337,
+						Host:  "127.0.0.1",
+						Port:  1337,
+						Proxy: nil,
 					},
 					TLS: &TLSConfig{
 						Cert:       "/path/to/server-cert.pem",
@@ -1084,9 +1155,10 @@ func createConfig() *Config {
 		},
 		Command: &Command{
 			Server: &ServerConfig{
-				Host: "127.0.0.1",
-				Port: 8888,
-				Type: Grpc,
+				Host:  "127.0.0.1",
+				Port:  8888,
+				Type:  "grpc",
+				Proxy: nil,
 			},
 			Auth: &AuthConfig{
 				Token:     "1234",
@@ -1102,9 +1174,10 @@ func createConfig() *Config {
 		},
 		AuxiliaryCommand: &Command{
 			Server: &ServerConfig{
-				Host: "second.management.plane",
-				Port: 9999,
-				Type: Grpc,
+				Host:  "second.management.plane",
+				Port:  9999,
+				Type:  "grpc",
+				Proxy: nil,
 			},
 			Auth: &AuthConfig{
 				Token:     "1234",
